@@ -24,12 +24,26 @@
   "Execute a block of Duckdb code with Babel."
   (let* ((cmd (or (cdr (assq :cmd params)) "duckdb"))
          (db (or (cdr (assq :db params)) ""))
-         (query body))
-    (with-temp-buffer
-      (write-region query nil (expand-file-name "temp.sql"))
-      (shell-command (concat cmd " \"" db "\" < temp.sql") t)
-      (delete-file "temp.sql")
-      (buffer-string))))
+         (query body)
+         (tmpsql (make-temp-file "ob-duckdb-sql-"))
+         (tmpout (make-temp-file "ob-duckdb-out-"))
+         (results-format (cdr (assq :results params))))
+
+    (with-temp-file tmpsql
+      (insert query))
+    (shell-command (concat cmd " \"" db "\" < " tmpsql " > " tmpout))
+    (delete-file tmpsql)
+
+    (if (member "table" (split-string results-format))
+        (org-babel-result-cond (cdr (assq :result-params params))
+          (with-temp-buffer
+            (insert-file-contents tmpout)
+            (org-table-convert-region (point-min) (point-max) '(4))
+            (buffer-string))
+          (delete-file tmpout))
+           (with-temp-buffer
+             (insert-file-contents tmpout)
+             (buffer-string)))))
 
 (defvar org-babel-default-header-args:duckdb '())
 
